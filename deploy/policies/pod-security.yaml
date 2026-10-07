@@ -1,0 +1,65 @@
+# Workload rules for the app namespaces that Pod Security Admission doesn't
+# cover. The "restricted" Pod Security Standard itself is enforced natively by
+# namespace labels (pod-security.kubernetes.io/enforce: restricted), set by
+# Argo CD managedNamespaceMetadata and scripts/local-up.sh. See ADR 0002.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: labops-disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow mutable image tags
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [labops-dev, labops-prod]
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+          !c.image.endsWith(':latest') &&
+          (c.image.contains('@') ||
+           c.image.substring(c.image.lastIndexOf('/') + 1).contains(':')))
+      message: "Images must use an immutable tag or digest, not ':latest' or no tag."
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: labops-require-resources
+  annotations:
+    policies.kyverno.io/title: Require CPU/memory requests and memory limits
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [labops-dev, labops-prod]
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+          has(c.resources) &&
+          has(c.resources.requests) && 'cpu' in c.resources.requests && 'memory' in c.resources.requests &&
+          has(c.resources.limits) && 'memory' in c.resources.limits)
+      message: "Every container needs cpu/memory requests and a memory limit."

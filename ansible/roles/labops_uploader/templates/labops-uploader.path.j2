@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Watch the instrument outbox for new spectra
+
+[Path]
+# PathChanged fires when a file in the folder is closed after writing, so
+# files the uploader leaves behind for retry don't cause a trigger loop.
+PathChanged={{ labops_uploader_outbox }}
+Unit=labops-uploader.service
+
+[Install]
+WantedBy=multi-user.target

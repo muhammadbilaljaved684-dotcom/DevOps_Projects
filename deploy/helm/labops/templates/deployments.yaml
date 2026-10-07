@@ -1,0 +1,109 @@
+{{- range $name, $c := .Values.components }}
+{{- if $c.enabled }}
+{{- $ctx := dict "root" $ "component" $name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "labops.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "labops.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if not (and (eq $name "worker") $.Values.autoscaling.worker.enabled) }}
+  replicas: {{ $c.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "labops.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "labops.selector" $ctx | nindent 8 }}
+        app.kubernetes.io/version: {{ $.Values.image.tag | quote }}
+      annotations:
+        # Roll pods when config changes (e.g. a game-day fault flag).
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "labops.fullname" $ }}
+      automountServiceAccountToken: false
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      # Spread replicas across nodes/zones so one node failure (game day 1)
+      # never takes a whole component down.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "labops.selector" $ctx | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "labops.selector" $ctx | nindent 14 }}
+      terminationGracePeriodSeconds: {{ if eq $name "worker" }}60{{ else }}30{{ end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "labops.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            {{- toYaml $c.command | nindent 12 }}
+          ports:
+            - name: {{ if eq $name "worker" }}metrics{{ else }}http{{ end }}
+              containerPort: {{ $c.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "labops.fullname" $ }}-config
+          env:
+            - name: LABOPS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "labops.dbSecret" $ }}
+                  key: {{ $.Values.database.secretKey }}
+            - name: AWS_REGION
+              value: {{ $.Values.awsRegion | default "eu-central-1" | quote }}
+          {{- if ne $name "worker" }}
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          {{- else }}
+          livenessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          {{- end }}
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}
+{{- end }}

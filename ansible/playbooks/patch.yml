@@ -1,0 +1,59 @@
+# Rolling OS patching with health checks: one host at a time, reboot only if
+# required, verify the uploader comes back, stop the whole run on failure.
+#   ansible-playbook playbooks/patch.yml
+- name: Rolling patch of lab-edge servers
+  hosts: lab_edge
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+
+  tasks:
+    - name: Upgrade packages (Debian family)
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+        autoremove: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Upgrade packages (RedHat family)
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest  # noqa: package-latest - patching is the point of this play
+        update_only: true
+      when: ansible_os_family == 'RedHat'
+
+    - name: Check whether a reboot is needed (Debian)
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_flag
+      when: ansible_os_family == 'Debian'
+
+    - name: Check whether a reboot is needed (RedHat)
+      ansible.builtin.command: needs-restarting -r
+      register: needs_restart
+      changed_when: false
+      failed_when: needs_restart.rc not in [0, 1]
+      when: ansible_os_family == 'RedHat'
+
+    - name: Reboot if required
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        msg: "Ansible rolling patch"
+      when: >-
+        (reboot_flag.stat.exists | default(false)) or
+        (needs_restart.rc | default(0)) == 1
+
+    - name: Read uploader and node_exporter unit state after patching
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+      loop: [labops-uploader.path, node_exporter.service]
+      register: health_units
+
+    - name: Verify uploader and node_exporter are healthy after patching
+      ansible.builtin.assert:
+        that: item.status.ActiveState == 'active'
+        fail_msg: "{{ item.item }} is {{ item.status.ActiveState }} after patching"
+        quiet: true
+      loop: "{{ health_units.results }}"
+      loop_control:
+        label: "{{ item.item }}"

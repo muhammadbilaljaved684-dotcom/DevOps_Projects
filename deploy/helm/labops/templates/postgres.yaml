@@ -1,0 +1,57 @@
+{{- if .Values.postgres.enabled }}
+# Postgres managed by the CloudNativePG operator: automatic failover between
+# instances, and (in prod) continuous WAL archiving to S3 for point-in-time
+# recovery. The operator creates the Secret "<name>-app" with a ready "uri".
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "labops.fullname" . }}-pg
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgres.instances }}
+  primaryUpdateStrategy: unsupervised
+  bootstrap:
+    initdb:
+      database: labops
+      owner: labops
+  storage:
+    size: {{ .Values.postgres.storageSize }}
+    {{- with .Values.postgres.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  {{- if .Values.postgres.backup.enabled }}
+  # Note: recent CloudNativePG releases move object-store backups to the
+  # Barman Cloud plugin. This in-tree block still works but check the
+  # operator version you install and migrate if it reports a deprecation.
+  backup:
+    retentionPolicy: {{ .Values.postgres.backup.retentionPolicy | quote }}
+    barmanObjectStore:
+      destinationPath: {{ required "postgres.backup.destinationPath is required" .Values.postgres.backup.destinationPath | quote }}
+      s3Credentials:
+        inheritFromIAMRole: true
+      wal:
+        compression: gzip
+  # The operator creates a service account per cluster; give it its own IAM
+  # role (Terraform output pg_role_arn) with access to the backup prefix only.
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        eks.amazonaws.com/role-arn: {{ required "postgres.backup.roleArn is required" .Values.postgres.backup.roleArn | quote }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "labops.fullname" . }}-pg-daily
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+spec:
+  schedule: "0 0 2 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: {{ include "labops.fullname" . }}-pg
+  {{- end }}
+{{- end }}

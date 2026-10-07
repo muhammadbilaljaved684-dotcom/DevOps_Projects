@@ -1,0 +1,21 @@
+# Dynamic inventory for EC2 lab-edge hosts, reached through AWS Systems
+# Manager: no SSH port open, no bastion, every session logged in CloudTrail.
+#   ansible-playbook -i inventories/aws/aws_ec2.yml playbooks/site.yml
+plugin: amazon.aws.aws_ec2
+regions: [eu-central-1]
+filters:
+  tag:Project: labops
+  tag:Role: lab-edge
+  instance-state-name: running
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+groups:
+  lab_edge: "tags.Role == 'lab-edge'"
+hostnames: [instance-id]
+compose:
+  ansible_connection: "'amazon.aws.aws_ssm'"
+  ansible_aws_ssm_region: "'eu-central-1'"
+  # SSM needs an S3 bucket for file transfers; Terraform output or your own.
+  ansible_aws_ssm_bucket_name: "'labops-ssm-transfer-CHANGE-ME'"

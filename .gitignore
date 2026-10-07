@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+junit.xml
+app/data/
+*.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+tfplan
+
+# Ansible / Vagrant
+ansible/collections/
+ansible/reports/
+.vagrant/
+
+# Misc
+.env
+.DS_Store
+deploy/monitoring/tests/rules.yaml

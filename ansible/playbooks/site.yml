@@ -1,0 +1,37 @@
+# Converge lab-edge hosts to the hardened baseline and install the uploader.
+# Safe to run any time: every task is idempotent, so a second run reports
+# 0 changes (CI checks that with --check --diff on a test VM).
+- name: Harden and configure lab-edge servers
+  hosts: lab_edge
+  become: true
+  serial: "50%"          # never touch all instruments' gateways at once
+  max_fail_percentage: 0
+
+  pre_tasks:
+    - name: Refuse unsupported OS families
+      ansible.builtin.assert:
+        that: ansible_os_family in ['Debian', 'RedHat']
+        fail_msg: "Supported: Ubuntu 22.04/24.04, RHEL/Rocky 9"
+
+  roles:
+    - role: baseline
+      tags: [baseline]
+    - role: devsec.hardening.os_hardening
+      tags: [hardening]
+    - role: devsec.hardening.ssh_hardening
+      tags: [hardening, ssh]
+    - role: prometheus.prometheus.node_exporter
+      tags: [monitoring]
+    - role: labops_uploader
+      tags: [uploader]
+
+  post_tasks:
+    - name: Smoke test - read uploader path unit state
+      ansible.builtin.systemd_service:
+        name: labops-uploader.path
+      register: uploader_unit
+
+    - name: Smoke test - uploader path unit is active
+      ansible.builtin.assert:
+        that: uploader_unit.status.ActiveState == 'active'
+        fail_msg: "labops-uploader.path is {{ uploader_unit.status.ActiveState }}"

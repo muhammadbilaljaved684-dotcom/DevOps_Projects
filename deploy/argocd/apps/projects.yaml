@@ -1,0 +1,51 @@
+# AppProjects scope what each group of apps may touch. The labops project can
+# only deploy from this repo into the two app namespaces, and cannot create
+# cluster-scoped resources: a compromised values file can't escalate.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: Shared cluster add-ons (operators, monitoring, policies, gateway)
+  sourceRepos: ["*"]
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: "*" }
+  clusterResourceWhitelist:
+    - { group: "*", kind: "*" }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: labops
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: The LabOps application, dev and prod
+  sourceRepos:
+    - https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects.git
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: labops-dev }
+    - { server: https://kubernetes.default.svc, namespace: labops-prod }
+  clusterResourceWhitelist: []
+  namespaceResourceBlacklist:
+    - { group: "", kind: ResourceQuota }
+    - { group: "", kind: LimitRange }
+  roles:
+    - name: developers
+      description: Can view and sync dev; prod is sync-only through Git
+      policies:
+        - p, proj:labops:developers, applications, get, labops/*, allow
+        - p, proj:labops:developers, applications, sync, labops/labops-dev, allow
+      groups:
+        - labops-developers   # Entra ID group (see infra/terraform/modules/entra-sso)
+  syncWindows:
+    # Prod changes only Mon–Thu 08:00–17:00 UTC; manual sync allowed for incidents.
+    - kind: allow
+      schedule: "0 8 * * 1-4"
+      duration: 9h
+      applications: [labops-prod]
+      manualSync: true

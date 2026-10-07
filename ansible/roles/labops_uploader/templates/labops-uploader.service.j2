@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Upload new instrument spectra to LabOps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=labops
+Group=labops
+ExecStart=/usr/local/bin/labops-upload new
+# Sandboxing: the uploader can only write to its spool folders.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths={{ labops_uploader_outbox | dirname }}
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", ":semanticCommits"],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "argocd": {
+    "fileMatch": ["^deploy/argocd/.+\\.ya?ml$"]
+  },
+  "packageRules": [
+    {
+      "description": "Group platform add-on chart bumps into one weekly PR",
+      "matchManagers": ["argocd"],
+      "groupName": "platform charts"
+    },
+    {
+      "description": "Major Terraform provider/module upgrades need a human",
+      "matchManagers": ["terraform"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Patch updates of actions and pip deps can auto-merge when CI is green",
+      "matchManagers": ["github-actions", "pep621"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true
+    }
+  ]
+}

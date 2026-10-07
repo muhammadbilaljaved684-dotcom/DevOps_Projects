@@ -1,0 +1,17 @@
+# Free local target for the Ansible work (VirtualBox).
+#   vagrant up
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook playbooks/compliance.yml   # score BEFORE
+#   ansible-playbook playbooks/site.yml
+#   ansible-playbook playbooks/compliance.yml   # score AFTER
+Vagrant.configure("2") do |config|
+  config.vm.define "edge-01" do |node|
+    node.vm.box = "bento/ubuntu-24.04"
+    node.vm.hostname = "edge-01"
+    node.vm.network "private_network", ip: "192.168.56.20"
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = 1024
+      vb.cpus = 1
+    end
+  end
+end

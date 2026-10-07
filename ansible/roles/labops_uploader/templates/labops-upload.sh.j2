@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Upload every CSV in the outbox. Success -> ../sent, rejected (HTTP 4xx) ->
+# ../failed for a human to inspect, network/5xx -> stays for the retry timer.
+set -euo pipefail
+
+OUTBOX="{{ labops_uploader_outbox }}"
+SENT="$OUTBOX/../sent"
+FAILED="$OUTBOX/../failed"
+URL="{{ labops_uploader_ingest_url }}/api/v1/uploads"
+MODE="${1:-new}"   # "new" (path unit) or "retry" (timer)
+
+# Give instrument software that writes in several chunks a moment to finish.
+[[ "$MODE" == "new" ]] && sleep 2
+
+shopt -s nullglob
+for f in "$OUTBOX"/*.csv; do
+  code=$(curl -sS -o /tmp/labops-upload.out -w '%{http_code}' \
+         --max-time {{ labops_uploader_upload_timeout }} -F "file=@${f};type=text/csv" "$URL") || code=000
+  case "$code" in
+    202) mv "$f" "$SENT/"; logger -t labops-upload "uploaded $(basename "$f")" ;;
+    4??) mv "$f" "$FAILED/"; logger -p user.warning -t labops-upload "rejected $(basename "$f") HTTP $code: $(head -c 200 /tmp/labops-upload.out)" ;;
+    *)   logger -p user.err -t labops-upload "will retry $(basename "$f"): HTTP $code" ;;
+  esac
+done

@@ -1,0 +1,137 @@
+# Everything a production Linux box needs before it runs anything:
+# named admins, time sync, firewall, audit trail, persistent logs, patching.
+
+- name: Install baseline packages
+  ansible.builtin.package:
+    name: "{{ baseline_packages[ansible_os_family] }}"
+    state: present
+
+- name: Admin accounts (named, key-only, no shared logins)
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    comment: "{{ item.comment }}"
+    groups: "{{ 'sudo' if ansible_os_family == 'Debian' else 'wheel' }}"
+    append: true
+    shell: /bin/bash
+    password: "!"           # locked password; SSH keys only
+    update_password: on_create
+  loop: "{{ baseline_admin_users }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: Authorised SSH keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.ssh_key }}"
+    exclusive: true
+  loop: "{{ baseline_admin_users }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: Sudo requires the user's own session and is logged
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-labops
+    mode: "0440"
+    validate: visudo -cf %s
+    content: |
+      Defaults use_pty
+      Defaults logfile="/var/log/sudo.log"
+      Defaults timestamp_timeout=5
+      %{{ 'sudo' if ansible_os_family == 'Debian' else 'wheel' }} ALL=(ALL:ALL) NOPASSWD: ALL
+
+- name: Time sync with chrony
+  ansible.builtin.service:
+    name: "{{ 'chrony' if ansible_os_family == 'Debian' else 'chronyd' }}"
+    state: started
+    enabled: true
+
+- name: Persistent journald with size cap
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/labops.conf
+    mode: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=500M
+      MaxRetentionSec=30day
+  notify: Restart journald
+
+- name: Audit rules for identity, privilege and SSH config changes
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/50-labops.rules
+    mode: "0640"
+    content: |
+      -w /etc/passwd -p wa -k identity
+      -w /etc/group -p wa -k identity
+      -w /etc/shadow -p wa -k identity
+      -w /etc/sudoers -p wa -k privilege
+      -w /etc/sudoers.d/ -p wa -k privilege
+      -w /etc/ssh/sshd_config -p wa -k sshd
+      -a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k root-commands
+  notify: Load audit rules
+
+- name: Enable auditd
+  ansible.builtin.service:
+    name: auditd
+    state: started
+    enabled: true
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Stop firewalld on RedHat family (we manage nftables directly)
+  ansible.builtin.service:
+    name: firewalld
+    state: stopped
+    enabled: false
+  when: ansible_os_family == 'RedHat' and 'firewalld.service' in ansible_facts.services | default({})
+
+- name: Firewall (nftables) - default deny inbound
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0600"
+    validate: nft -c -f %s
+  notify: Reload nftables
+
+- name: Enable nftables
+  ansible.builtin.service:
+    name: nftables
+    state: started
+    enabled: true
+
+- name: Automatic security updates (Debian)
+  when: ansible_os_family == 'Debian' and baseline_auto_security_updates
+  block:
+    - name: Unattended-upgrades config
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/52labops-unattended
+        mode: "0644"
+        content: |
+          Unattended-Upgrade::Allowed-Origins { "${distro_id}:${distro_codename}-security"; };
+          Unattended-Upgrade::Automatic-Reboot "false";
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+    - name: Enable periodic runs
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+
+- name: Automatic security updates (RedHat)
+  when: ansible_os_family == 'RedHat' and baseline_auto_security_updates
+  block:
+    - name: Configure dnf-automatic for security updates only
+      community.general.ini_file:
+        path: /etc/dnf/automatic.conf
+        section: commands
+        option: "{{ item.k }}"
+        value: "{{ item.v }}"
+        mode: "0644"
+      loop:
+        - { k: upgrade_type, v: security }
+        - { k: apply_updates, v: "yes" }
+    - name: Enable dnf-automatic timer
+      ansible.builtin.service:
+        name: dnf-automatic.timer
+        state: started
+        enabled: true

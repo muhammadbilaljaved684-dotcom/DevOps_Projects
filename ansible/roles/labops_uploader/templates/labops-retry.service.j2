@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Retry spectra that failed to upload (network/5xx)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=labops
+Group=labops
+ExecStart=/usr/local/bin/labops-upload retry
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths={{ labops_uploader_outbox | dirname }}

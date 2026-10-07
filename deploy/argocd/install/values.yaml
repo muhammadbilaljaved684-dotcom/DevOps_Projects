@@ -1,0 +1,36 @@
+# Values for installing Argo CD itself (helm chart argo/argo-cd).
+#   make argocd            -> local/kind
+#   make argocd ENTRA=1    -> also loads values-entra.yaml (SSO)
+global:
+  domain: argocd.labops.localtest.me
+
+configs:
+  params:
+    server.insecure: true        # TLS terminates at the Gateway
+  cm:
+    timeout.reconciliation: 180s
+    # Health check so Argo shows CloudNativePG clusters as Healthy/Degraded.
+    resource.customizations.health.postgresql.cnpg.io_Cluster: |
+      hs = {}
+      if obj.status ~= nil and obj.status.phase ~= nil then
+        if obj.status.phase == "Cluster in healthy state" then
+          hs.status = "Healthy"
+        else
+          hs.status = "Progressing"
+        end
+        hs.message = obj.status.phase
+        return hs
+      end
+      hs.status = "Progressing"
+      return hs
+  rbac:
+    policy.default: role:readonly
+
+server:
+  replicas: 1
+controller:
+  replicas: 1
+repoServer:
+  replicas: 1
+dex:
+  enabled: false

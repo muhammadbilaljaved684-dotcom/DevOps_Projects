@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "labops.fullname" . }}-config
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+data:
+  LABOPS_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  LABOPS_QUEUE_BACKEND: {{ .Values.config.queueBackend | quote }}
+  LABOPS_REDIS_URL: {{ printf "redis://%s-redis:6379/0" (include "labops.fullname" .) | quote }}
+  LABOPS_STORAGE_BACKEND: {{ .Values.config.storageBackend | quote }}
+  LABOPS_S3_BUCKET: {{ .Values.config.s3Bucket | quote }}
+  LABOPS_MAX_UPLOAD_BYTES: {{ .Values.config.maxUploadBytes | quote }}
+  LABOPS_FAULT_MODE: {{ .Values.config.faultMode | quote }}
+  LABOPS_FAULT_DELAY_SECONDS: {{ .Values.config.faultDelaySeconds | quote }}

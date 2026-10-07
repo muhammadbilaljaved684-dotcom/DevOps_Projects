@@ -1,0 +1,169 @@
+# Cluster add-ons. Chart versions are pinned and kept current by Renovate
+# (renovate.json). Versions were current in October 2026.
+# Sync waves order the install: CRDs/operators first, then things that use them.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.1.0
+    helm:
+      releaseName: kube-prometheus-stack
+      valuesObject:
+        prometheus:
+          prometheusSpec:
+            retention: 15d
+            # Pick up ServiceMonitors/Rules from every namespace.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+        grafana:
+          sidecar:
+            dashboards: { enabled: true, label: grafana_dashboard, searchNamespace: ALL }
+          # SSO via Entra ID (docs/entra-sso.md). The secret is optional so the
+          # stack still starts on a laptop; SSO switches on when it exists.
+          envFromSecrets:
+            - name: grafana-entra
+              optional: true
+          grafana.ini:
+            server:
+              root_url: https://grafana.labops.example.com
+            auth.azuread:
+              enabled: $__env{ENTRA_SSO_ENABLED}
+              name: Microsoft Entra ID
+              allow_sign_up: true
+              client_id: $__env{ENTRA_CLIENT_ID}
+              client_secret: $__env{ENTRA_CLIENT_SECRET}
+              scopes: openid email profile
+              auth_url: https://login.microsoftonline.com/$__env{ENTRA_TENANT_ID}/oauth2/v2.0/authorize
+              token_url: https://login.microsoftonline.com/$__env{ENTRA_TENANT_ID}/oauth2/v2.0/token
+              # Entra group object IDs -> Grafana roles (Terraform outputs).
+              role_attribute_path: >-
+                contains(groups[*], '$__env{ENTRA_ADMINS_GROUP}') && 'Admin' ||
+                contains(groups[*], '$__env{ENTRA_DEVS_GROUP}') && 'Editor' || 'Viewer'
+              role_attribute_strict: true
+        alertmanager:
+          config:
+            route:
+              receiver: default
+              group_by: [alertname, namespace]
+              routes:
+                - matchers: ['severity="page"']
+                  receiver: page
+            receivers:
+              - name: default
+              - name: page   # wire to Teams/Slack/PagerDuty in your fork
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: cloudnative-pg
+    targetRevision: 0.29.1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  source:
+    repoURL: https://kyverno.github.io/kyverno
+    chart: kyverno
+    targetRevision: 3.9.1
+    helm:
+      valuesObject:
+        admissionController:
+          replicas: 1   # 3 in a real prod cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects.git
+    targetRevision: main
+    path: deploy/policies
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: envoy-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  source:
+    repoURL: docker.io/envoyproxy
+    chart: gateway-helm
+    targetRevision: v1.9.2
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects.git
+    targetRevision: main
+    path: deploy/platform/gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

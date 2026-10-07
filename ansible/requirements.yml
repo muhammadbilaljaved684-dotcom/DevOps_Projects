@@ -1,0 +1,8 @@
+collections:
+  - name: devsec.hardening          # OS + SSH hardening (dev-sec.io), used by roles/baseline
+    version: ">=10.0.0"
+  - name: ansible.posix
+  - name: community.general
+  - name: prometheus.prometheus     # node_exporter
+  - name: amazon.aws                # aws_ec2 inventory + SSM connection
+  - name: community.aws

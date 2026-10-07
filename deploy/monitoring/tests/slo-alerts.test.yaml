@@ -1,0 +1,77 @@
+# Unit tests for the SLO alerts, run in CI with promtool. The rules file is
+# rendered from the Helm chart first (see .github/workflows/platform-checks.yml):
+#   helm template ... | yq 'select(.kind=="PrometheusRule") | .spec' > rules.yaml
+#   promtool test rules slo-alerts.test.yaml
+rule_files: [rules.yaml]
+evaluation_interval: 30s
+
+tests:
+  # Half of all uploads fail: the 14.4x fast-burn page must fire.
+  - interval: 1m
+    input_series:
+      - series: 'labops_job_e2e_seconds_bucket{namespace="labops-prod",outcome="success",le="30.0"}'
+        values: '0+5x60'
+      - series: 'labops_job_e2e_seconds_count{namespace="labops-prod",outcome="success"}'
+        values: '0+5x60'
+      - series: 'labops_job_e2e_seconds_count{namespace="labops-prod",outcome="failure"}'
+        values: '0+5x60'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: LabOpsSLOFastBurn
+        exp_alerts: []          # still pending: "for: 2m" stops paging on blips
+      - eval_time: 10m
+        alertname: LabOpsSLOFastBurn
+        exp_alerts:
+          - exp_labels: { severity: page, slo: upload-latency }
+            exp_annotations:
+              summary: LabOps is burning its error budget fast (14.4x)
+              description: 50% of uploads in the last hour were slow or failed. At this rate the monthly error budget is gone in about 2 days.
+              runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/slo-burn.md
+
+  # Healthy traffic, every job under 30 s: no SLO alert.
+  - interval: 1m
+    input_series:
+      - series: 'labops_job_e2e_seconds_bucket{namespace="labops-prod",outcome="success",le="30.0"}'
+        values: '0+10x60'
+      - series: 'labops_job_e2e_seconds_count{namespace="labops-prod",outcome="success"}'
+        values: '0+10x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LabOpsSLOFastBurn
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: LabOpsSLOSlowBurn
+        exp_alerts: []
+
+  # Successful but slow (>30 s) jobs still burn budget: this is a latency SLO.
+  - interval: 1m
+    input_series:
+      - series: 'labops_job_e2e_seconds_bucket{namespace="labops-prod",outcome="success",le="30.0"}'
+        values: '0+2x60'
+      - series: 'labops_job_e2e_seconds_count{namespace="labops-prod",outcome="success"}'
+        values: '0+10x60'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: LabOpsSLOFastBurn
+        exp_alerts:
+          - exp_labels: { severity: page, slo: upload-latency }
+            exp_annotations:
+              summary: LabOps is burning its error budget fast (14.4x)
+              description: 80% of uploads in the last hour were slow or failed. At this rate the monthly error budget is gone in about 2 days.
+              runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/slo-burn.md
+
+  # Every worker target down: page after 3 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'up{namespace="labops-prod",service="labops-worker",pod="w1"}'
+        values: '0x10'
+      - series: 'up{namespace="labops-prod",service="labops-worker",pod="w2"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LabOpsWorkersDown
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations:
+              summary: No LabOps worker is being scraped; uploads are not being processed
+              runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/workers-down.md

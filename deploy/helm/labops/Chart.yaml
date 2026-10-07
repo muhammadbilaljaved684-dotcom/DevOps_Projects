@@ -1,0 +1,9 @@
+apiVersion: v2
+name: labops
+description: LabOps measurement-processing platform (ingest API, worker, results API)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.30.0-0"
+maintainers:
+  - name: Muhammad Bilal Javed

@@ -1,0 +1,40 @@
+# CIS benchmark scan with OpenSCAP; HTML reports are fetched to ./reports/.
+# Run before and after site.yml and put both scores in the README; the
+# difference is the evidence that the hardening actually did something.
+- name: OpenSCAP CIS compliance scan
+  hosts: lab_edge
+  become: true
+  vars:
+    report_dir: "{{ playbook_dir }}/../reports"
+    scap_profile: xccdf_org.ssgproject.content_profile_cis_level1_server
+    scap_content:
+      Debian: "/usr/share/xml/scap/ssg/content/ssg-ubuntu{{ ansible_distribution_version | replace('.', '') }}-ds.xml"
+      RedHat: "/usr/share/xml/scap/ssg/content/ssg-rhel{{ ansible_distribution_major_version }}-ds.xml"
+
+  tasks:
+    - name: Install OpenSCAP scanner and content (Debian)
+      ansible.builtin.apt:
+        name: [openscap-scanner, ssg-debderived]
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install OpenSCAP scanner and content (RedHat)
+      ansible.builtin.dnf:
+        name: [openscap-scanner, scap-security-guide]
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Run the scan (non-zero exit means "some rules failed", not an error)
+      ansible.builtin.command: >-
+        oscap xccdf eval --profile {{ scap_profile }}
+        --results /tmp/oscap-results.xml --report /tmp/oscap-report.html
+        {{ scap_content[ansible_os_family] }}
+      register: scan
+      changed_when: false
+      failed_when: scan.rc not in [0, 2]
+
+    - name: Fetch HTML report
+      ansible.builtin.fetch:
+        src: /tmp/oscap-report.html
+        dest: "{{ report_dir }}/{{ inventory_hostname }}-{{ ansible_date_time.date }}.html"
+        flat: true

@@ -1,0 +1,54 @@
+# Supply-chain gate: a LabOps image only runs if it was signed by THIS repo's
+# CI workflow on main (cosign keyless / Sigstore, GitHub OIDC identity) and
+# carries an SBOM attestation signed by the same identity. Kyverno also
+# rewrites the tag to the digest it verified, so what runs is exactly what
+# was signed.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: labops-verify-image-signature
+  annotations:
+    policies.kyverno.io/title: Verify LabOps image signatures and SBOM
+    policies.kyverno.io/severity: high
+spec:
+  validationActions: [Deny]
+  failurePolicy: Fail
+  webhookConfiguration:
+    timeoutSeconds: 30
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [labops-dev, labops-prod]
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  matchImageReferences:
+    - glob: "ghcr.io/muhammadbilaljaved684-dotcom/labops*"
+  validationConfigurations:
+    mutateDigest: true
+    verifyDigest: true
+    required: true
+  attestors:
+    - name: ci
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: "https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/.github/workflows/ci.yml@refs/heads/main"
+        ctlog:
+          url: https://rekor.sigstore.dev
+  attestations:
+    - name: sbom
+      intoto:
+        type: https://spdx.dev/Document
+  validations:
+    - expression: >-
+        images.containers.map(image, verifyImageSignatures(image, [attestors.ci])).all(e, e > 0)
+      message: "Image is not signed by the LabOps CI workflow on main."
+    - expression: >-
+        images.containers.map(image, verifyAttestationSignatures(image, attestations.sbom, [attestors.ci])).all(e, e > 0)
+      message: "Image has no SBOM attestation signed by the LabOps CI workflow."

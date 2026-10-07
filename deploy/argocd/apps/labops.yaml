@@ -1,0 +1,68 @@
+# The application itself, once per environment.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: labops-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: labops
+  source:
+    repoURL: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects.git
+    targetRevision: main
+    path: deploy/helm/labops
+    helm:
+      releaseName: labops
+      valueFiles: [values.yaml, values-dev.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: labops-dev
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    managedNamespaceMetadata:
+      labels:
+        # Native Pod Security Admission: the "restricted" profile is enforced
+        # by the API server itself (ADR 0002).
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest
+        pod-security.kubernetes.io/warn: restricted
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: labops-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+    # Argo CD Notifications: tell the team channel about every prod sync.
+    notifications.argoproj.io/subscribe.on-sync-succeeded.teams: labops
+    notifications.argoproj.io/subscribe.on-health-degraded.teams: labops
+spec:
+  project: labops
+  source:
+    repoURL: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects.git
+    targetRevision: main
+    path: deploy/helm/labops
+    helm:
+      releaseName: labops
+      valueFiles: [values.yaml, values-prod.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: labops-prod
+  syncPolicy:
+    # Self-heal keeps prod equal to Git (no kubectl edits survive), but
+    # pruning is manual in prod so a bad commit can't delete the database.
+    automated: { prune: false, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    managedNamespaceMetadata:
+      labels:
+        # Native Pod Security Admission: the "restricted" profile is enforced
+        # by the API server itself (ADR 0002).
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest
+        pod-security.kubernetes.io/warn: restricted

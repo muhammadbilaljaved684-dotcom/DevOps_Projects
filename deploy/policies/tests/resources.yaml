@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Pod
+metadata: { name: good-pod, namespace: labops-dev }
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: app
+      image: ghcr.io/example/labops:3f2c1ab
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { memory: 256Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: latest-tag, namespace: labops-dev }
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/example/labops:latest
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { memory: 256Mi }
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: no-tag, namespace: labops-dev }
+spec:
+  containers:
+    - name: app
+      image: nginx
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { memory: 256Mi }
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: no-limits, namespace: labops-dev }
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/example/labops:3f2c1ab
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: runs-as-root, namespace: labops-dev }
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/example/labops:3f2c1ab
+      securityContext:
+        runAsUser: 0
+        privileged: true
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { memory: 256Mi }

@@ -1,0 +1,33 @@
+# --- people -------------------------------------------------------------
+# Named admin accounts only (no shared logins). Keys only; passwords locked.
+baseline_admin_users:
+  - name: bilal
+    comment: Muhammad Bilal Javed
+    ssh_key: "ssh-ed25519 AAAA...REPLACE-ME bilal@laptop"
+
+# --- SSH hardening (devsec.hardening.ssh_hardening) ----------------------
+ssh_permit_root_login: "no"
+ssh_allow_tcp_forwarding: "no"
+ssh_allow_agent_forwarding: false
+ssh_max_auth_retries: 3
+ssh_client_alive_interval: 300
+ssh_allow_users: "{{ baseline_admin_users | map(attribute='name') | join(' ') }}"
+ssh_server_password_login: false
+
+# --- OS hardening (devsec.hardening.os_hardening) ------------------------
+os_auth_pw_max_age: 99999          # no password logins exist
+os_security_kernel_enable_module_loading: true
+sysctl_overwrite:
+  net.ipv4.ip_forward: 0
+
+# --- firewall -------------------------------------------------------------
+baseline_firewall_allowed_tcp: [22, 9100]   # ssh, node_exporter (scraped by Prometheus)
+baseline_firewall_metrics_source: 10.0.0.0/8
+
+# --- patching --------------------------------------------------------------
+baseline_auto_security_updates: true
+reboot_window: "Sun 03:00"
+
+# --- uploader --------------------------------------------------------------
+labops_uploader_ingest_url: "https://labops.example.com"
+labops_uploader_outbox: /srv/instrument/outbox

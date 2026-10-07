@@ -1,0 +1,30 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+flush ruleset
+
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    ct state established,related accept
+    ct state invalid drop
+    iif "lo" accept
+    ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } limit rate 10/second accept
+    ip6 nexthdr icmpv6 accept
+
+    tcp dport 22 ct state new limit rate 15/minute accept
+{% for port in baseline_firewall_allowed_tcp if port != 22 and port != 9100 %}
+    tcp dport {{ port }} accept
+{% endfor %}
+{% if 9100 in baseline_firewall_allowed_tcp %}
+    ip saddr {{ baseline_firewall_metrics_source }} tcp dport 9100 accept
+{% endif %}
+
+    log prefix "nft-drop: " level info limit rate 5/minute
+  }
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+  }
+  chain output {
+    type filter hook output priority 0; policy accept;
+  }
+}

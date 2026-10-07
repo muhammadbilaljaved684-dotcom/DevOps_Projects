@@ -1,0 +1,8 @@
+baseline_admin_users: []
+baseline_auto_security_updates: true
+baseline_firewall_allowed_tcp: [22]
+baseline_firewall_metrics_source: 10.0.0.0/8
+
+baseline_packages:
+  Debian: [auditd, chrony, nftables, curl, jq, unattended-upgrades, needrestart]
+  RedHat: [audit, chrony, nftables, curl, jq, dnf-automatic, dnf-utils]

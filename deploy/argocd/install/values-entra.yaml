@@ -1,0 +1,22 @@
+# Argo CD login through Microsoft Entra ID (OIDC), groups -> Argo CD roles.
+# The app registration and groups are created by Terraform
+# (infra/terraform/modules/entra-sso); copy its outputs here.
+configs:
+  cm:
+    url: https://argocd.labops.example.com
+    oidc.config: |
+      name: Microsoft Entra ID
+      issuer: https://login.microsoftonline.com/TENANT_ID/v2.0
+      clientID: ARGOCD_CLIENT_ID
+      clientSecret: $argocd-entra:clientSecret
+      requestedScopes: [openid, profile, email]
+      requestedIDTokenClaims:
+        groups:
+          essential: true
+  rbac:
+    policy.default: role:readonly
+    scopes: "[groups]"
+    # Entra group object IDs (Terraform outputs entra_admins_group_id / entra_devs_group_id)
+    policy.csv: |
+      g, ENTRA_ADMINS_GROUP_ID, role:admin
+      g, ENTRA_DEVS_GROUP_ID, proj:labops:developers

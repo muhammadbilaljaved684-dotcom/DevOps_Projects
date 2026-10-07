@@ -1,0 +1,13 @@
+{{- if .Values.monitoring.grafanaDashboard }}
+# Picked up by the Grafana sidecar in kube-prometheus-stack (label below).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "labops.fullname" . }}-dashboard
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  labops.json: |-
+    {{- .Files.Get "dashboards/labops.json" | nindent 4 }}
+{{- end }}

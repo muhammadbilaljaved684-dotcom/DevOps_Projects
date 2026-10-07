@@ -1,0 +1,99 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+# Zero-trust baseline for the app pods: deny everything, then allow only the
+# flows the architecture diagram shows. (CloudNativePG pods are managed by
+# the operator and are not selected here.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "labops.fullname" . }}-default-deny
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: {{ include "labops.name" . }}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "labops.fullname" . }}-app
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name | quote }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [ingest, results, worker]
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # HTTP from the ingress controller (and from each other for smoke tests)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - port: 8000
+    # Prometheus scrapes
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.monitoringNamespace }}
+      ports:
+        - port: 8000
+        - port: 9100
+  egress:
+    - to:   # DNS
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:   # Redis
+        - podSelector:
+            matchLabels:
+              {{- include "labops.selector" (dict "root" . "component" "redis") | nindent 14 }}
+      ports:
+        - port: 6379
+    - to:   # Postgres (CloudNativePG cluster pods)
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "labops.fullname" . }}-pg
+      ports:
+        - port: 5432
+    - ports:  # HTTPS to AWS APIs (S3, STS for IRSA)
+        - port: 443
+{{- if .Values.redis.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "labops.fullname" . }}-redis
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "labops.selector" (dict "root" . "component" "redis") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - port: 6379
+  egress: []
+{{- end }}
+{{- end }}

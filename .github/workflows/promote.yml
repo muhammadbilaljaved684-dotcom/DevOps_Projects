@@ -1,0 +1,45 @@
+# Promote the image currently running in dev to prod by opening a pull
+# request. Merging the PR (after review, inside the Argo CD sync window) is
+# the deployment. Rollback = revert the PR. Every prod change has an author,
+# a reviewer and a timestamp in Git.
+name: promote-to-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to promote (leave empty = whatever dev runs now)"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-$(grep -E '^  tag:' deploy/helm/labops/values-dev.yaml | head -1 | sed -E 's/.*"(.*)".*/\1/')}"
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then echo "invalid tag: $TAG"; exit 1; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          sed -i -E "0,/^  tag: /s|^(  tag: ).*|\1\"${TAG}\"|" deploy/helm/labops/values-prod.yaml
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: promote/${{ steps.tag.outputs.tag }}
+          title: "deploy(prod): ${{ steps.tag.outputs.tag }}"
+          commit-message: "deploy(prod): ${{ steps.tag.outputs.tag }}"
+          labels: deploy-prod
+          body: |
+            Promotes `${{ steps.tag.outputs.tag }}` from dev to prod.
+
+            **Before merging**
+            - [ ] Dev has run this tag for at least 1 hour with no SLO alerts
+            - [ ] Grafana "LabOps" dashboard: error budget not burning in dev
+            - [ ] Release notes / changes reviewed
+
+            **Rollback:** revert this PR; Argo CD restores the previous image.

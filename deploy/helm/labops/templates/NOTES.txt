@@ -1,0 +1,14 @@
+LabOps {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Image: {{ include "labops.image" . }}
+
+Try it:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "labops.fullname" . }}-ingest 8000:8000 &
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "labops.fullname" . }}-results 8001:8000 &
+  python -m labops.cli load --url http://localhost:8000 --count 20
+  open http://localhost:8001
+
+{{- if .Values.config.faultMode }}
+
+WARNING: fault injection is ACTIVE (mode={{ .Values.config.faultMode }}). This is for game days only.
+{{- end }}

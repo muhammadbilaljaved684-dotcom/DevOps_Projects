@@ -1,0 +1,54 @@
+# Cluster backups to S3 (prod/EKS only, so this lives outside apps/ and is
+# applied by `make eks-bootstrap`). Credentials come from IRSA, no keys.
+# Postgres has its own PITR backups via CloudNativePG; Velero covers the
+# Kubernetes objects and PVCs so a whole namespace can be restored.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  source:
+    repoURL: https://vmware-tanzu.github.io/helm-charts
+    chart: velero
+    targetRevision: 12.2.0
+    helm:
+      valuesObject:
+        serviceAccount:
+          server:
+            annotations:
+              eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/labops-prod-velero
+        initContainers:
+          - name: velero-plugin-for-aws
+            image: velero/velero-plugin-for-aws:v1.14.4
+            volumeMounts:
+              - { mountPath: /target, name: plugins }
+        configuration:
+          backupStorageLocation:
+            - name: default
+              provider: aws
+              bucket: labops-prod-backup-CHANGE-ME
+              prefix: velero
+              config: { region: eu-central-1 }
+          volumeSnapshotLocation:
+            - name: default
+              provider: aws
+              config: { region: eu-central-1 }
+        credentials:
+          useSecret: false
+        schedules:
+          labops-daily:
+            schedule: "0 3 * * *"
+            template:
+              ttl: 336h
+              includedNamespaces: [labops-prod]
+              snapshotVolumes: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

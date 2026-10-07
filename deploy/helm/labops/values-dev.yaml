@@ -1,0 +1,30 @@
+# Dev environment (local kind cluster or the EKS dev namespace).
+# CI updates image.tag here automatically after every green build on main.
+image:
+  tag: "0.1.0"
+
+config:
+  logLevel: DEBUG
+  storageBackend: db
+
+components:
+  ingest:
+    replicas: 1
+  results:
+    replicas: 1
+
+autoscaling:
+  worker:
+    minReplicas: 1
+    maxReplicas: 3
+
+podDisruptionBudget:
+  enabled: false
+
+postgres:
+  instances: 1
+  storageSize: 1Gi
+
+gateway:
+  enabled: true
+  hostname: labops.localtest.me     # resolves to 127.0.0.1, works with kind

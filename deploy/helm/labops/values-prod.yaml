@@ -1,0 +1,43 @@
+# Prod environment (EKS). Changes here only land through a reviewed pull
+# request; Argo CD syncs prod from main, never from a branch.
+image:
+  # Promoted from dev by the "promote" workflow (opens a PR).
+  tag: "0.1.0"
+
+serviceAccount:
+  annotations:
+    # Terraform output: labops_irsa_role_arn
+    eks.amazonaws.com/role-arn: "arn:aws:iam::111111111111:role/labops-prod-app"
+
+config:
+  storageBackend: s3
+  # Terraform output: raw_bucket_name
+  s3Bucket: "labops-prod-raw-CHANGE-ME"
+
+awsRegion: eu-central-1
+
+components:
+  ingest:
+    replicas: 2
+  results:
+    replicas: 2
+
+autoscaling:
+  worker:
+    minReplicas: 2
+    maxReplicas: 8
+
+postgres:
+  instances: 2
+  storageSize: 10Gi
+  storageClass: gp3
+  backup:
+    enabled: true
+    # Terraform output: backup_bucket_name
+    destinationPath: "s3://labops-prod-backup-CHANGE-ME/cnpg"
+    # Terraform output: pg_role_arn
+    roleArn: "arn:aws:iam::111111111111:role/labops-prod-pg"
+
+gateway:
+  enabled: true
+  hostname: labops.example.com      # TLS is terminated on the shared Gateway (cert-manager)

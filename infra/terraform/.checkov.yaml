@@ -1,0 +1,18 @@
+# Checkov runs every policy except the ones below. Each skip is a conscious,
+# documented decision, which is exactly how a real team handles scanner noise.
+skip-check:
+  # Access logging on the state/data buckets: worth it in a company, but it
+  # needs another bucket and costs money in a demo account.
+  - CKV_AWS_18
+  # Cross-region replication of S3 buckets: out of scope for a single-region demo.
+  - CKV_AWS_144
+  # Event notifications on S3 buckets: not needed for this workload.
+  - CKV2_AWS_62
+  # SSE-KMS with customer-managed keys on app buckets: AES256 (SSE-S3) is
+  # used to avoid per-request KMS cost; the state bucket does use KMS.
+  - CKV_AWS_145
+  # The GitHub apply role intentionally has AdministratorAccess; it can only
+  # be assumed from an approved GitHub Environment (see modules/github-oidc).
+  - CKV_AWS_274
+download-external-modules: false
+quiet: true

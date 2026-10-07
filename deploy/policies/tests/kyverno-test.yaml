@@ -1,0 +1,33 @@
+# Run in CI with: kyverno test deploy/policies/tests
+# (Argo CD does not sync this subfolder; it only syncs deploy/policies/*.yaml.)
+# The restricted Pod Security Standard is enforced by namespace labels, not
+# Kyverno, so the runs-as-root pod passes these policies on purpose.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: labops-policies
+policies:
+  - ../pod-security.yaml
+resources:
+  - resources.yaml
+results:
+  - isValidatingPolicy: true
+    policy: labops-disallow-latest-tag
+    kind: Pod
+    resources: [good-pod, no-limits, runs-as-root]
+    result: pass
+  - isValidatingPolicy: true
+    policy: labops-disallow-latest-tag
+    kind: Pod
+    resources: [latest-tag, no-tag]
+    result: fail
+  - isValidatingPolicy: true
+    policy: labops-require-resources
+    kind: Pod
+    resources: [good-pod, latest-tag, no-tag, runs-as-root]
+    result: pass
+  - isValidatingPolicy: true
+    policy: labops-require-resources
+    kind: Pod
+    resources: [no-limits]
+    result: fail

@@ -1,0 +1,103 @@
+{{- if .Values.monitoring.prometheusRule }}
+{{- $slo := .Values.monitoring.slo }}
+{{- $le := printf "%.1f" (float64 $slo.latencySeconds) }}
+{{- $budget := subf 1.0 $slo.objective }}
+{{- $ns := .Release.Namespace }}
+# SLO: {{ mulf $slo.objective 100 }}% of uploads have a result within {{ $slo.latencySeconds }}s.
+#
+# Good event = job succeeded AND finished within the threshold.
+# Everything else (slow, failed, errored) burns error budget.
+# Alerts use multi-window, multi-burn-rate (Google SRE Workbook, ch. 5):
+#   page   : burning 14.4x budget over 1h (and 5m)  -> 2% of 30-day budget gone in 1h
+#   page   : burning 6x over 6h (and 30m)
+#   ticket : burning 1x over 3d (and 6h)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "labops.fullname" . }}-slo
+  labels:
+    {{- include "labops.labels" . | nindent 4 }}
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: labops-sli-recording
+      interval: 30s
+      rules:
+        {{- range $w := list "5m" "30m" "1h" "6h" "3d" }}
+        - record: labops:sli_error_ratio:rate{{ $w }}
+          expr: |
+            1 - (
+              sum(rate(labops_job_e2e_seconds_bucket{namespace="{{ $ns }}",outcome="success",le="{{ $le }}"}[{{ $w }}]))
+              /
+              clamp_min(sum(rate(labops_job_e2e_seconds_count{namespace="{{ $ns }}"}[{{ $w }}])), 1e-9)
+            )
+        {{- end }}
+
+    - name: labops-slo-alerts
+      rules:
+        - alert: LabOpsSLOFastBurn
+          expr: |
+            labops:sli_error_ratio:rate1h > (14.4 * {{ $budget }})
+            and
+            labops:sli_error_ratio:rate5m > (14.4 * {{ $budget }})
+          for: 2m
+          labels: { severity: page, slo: upload-latency }
+          annotations:
+            summary: "LabOps is burning its error budget fast (14.4x)"
+            description: >-
+              {{`{{ $value | humanizePercentage }}`}} of uploads in the last hour were slow or failed.
+              At this rate the monthly error budget is gone in about 2 days.
+            runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/slo-burn.md
+        - alert: LabOpsSLOSlowBurn
+          expr: |
+            labops:sli_error_ratio:rate6h > (6 * {{ $budget }})
+            and
+            labops:sli_error_ratio:rate30m > (6 * {{ $budget }})
+          for: 15m
+          labels: { severity: page, slo: upload-latency }
+          annotations:
+            summary: "LabOps error budget burn (6x) over 6h"
+            runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/slo-burn.md
+        - alert: LabOpsSLOBudgetLeak
+          expr: |
+            labops:sli_error_ratio:rate3d > {{ $budget }}
+            and
+            labops:sli_error_ratio:rate6h > {{ $budget }}
+          for: 1h
+          labels: { severity: ticket, slo: upload-latency }
+          annotations:
+            summary: "LabOps is consuming error budget faster than allowed (3-day view)"
+            runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/slo-burn.md
+
+    - name: labops-symptoms
+      rules:
+        - alert: LabOpsQueueBacklog
+          expr: max(labops_queue_depth{namespace="{{ $ns }}"}) > {{ .Values.monitoring.queueBacklogThreshold }}
+          for: 10m
+          labels: { severity: ticket }
+          annotations:
+            summary: "{{`{{ $value }}`}} jobs waiting in the queue for 10m"
+            runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/queue-backlog.md
+        - alert: LabOpsWorkersDown
+          expr: |
+            sum(up{namespace="{{ $ns }}",service=~".*-worker"}) == 0
+            or absent(up{namespace="{{ $ns }}",service=~".*-worker"})
+          for: 3m
+          labels: { severity: page }
+          annotations:
+            summary: "No LabOps worker is being scraped; uploads are not being processed"
+            runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/workers-down.md
+        - alert: LabOpsFaultInjectionActive
+          expr: max(labops_fault_mode_enabled{namespace="{{ $ns }}"}) == 1
+          for: 1m
+          labels: { severity: ticket }
+          annotations:
+            summary: "Fault injection is enabled in {{ $ns }}; make sure a game day is in progress"
+        - alert: LabOpsPodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="{{ $ns }}",container=~"ingest|results|worker"}[15m]) > 3
+          labels: { severity: ticket }
+          annotations:
+            summary: "{{`{{ $labels.pod }}`}} restarted more than 3 times in 15m"
+            runbook_url: https://github.com/muhammadbilaljaved684-dotcom/DevOps_Projects/blob/main/docs/runbooks/crashloop.md
+{{- end }}
