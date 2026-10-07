@@ -31,6 +31,10 @@ Instruments in a lab produce spectra (here: optically detected magnetic resonanc
 
 ## Architecture
 
+![LabOps architecture](docs/images/architecture.png)
+
+The same flow as a diagram GitHub renders natively:
+
 ```mermaid
 flowchart LR
   subgraph Lab["Lab (Linux edge server, Ansible-managed)"]
