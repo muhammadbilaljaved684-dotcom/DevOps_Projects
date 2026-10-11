@@ -9,6 +9,7 @@ on:
   push:
     branches: [main]
     paths: ["deploy/**", "ansible/**"]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
