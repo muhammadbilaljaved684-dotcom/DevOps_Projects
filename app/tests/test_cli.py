@@ -34,3 +34,11 @@ def test_requeue_only_old_stuck_jobs(deps):
     assert deps.queue.depth() == 0
     assert cli.requeue_stuck(deps, 300) == [old_stuck]
     assert worker.process(deps, deps.queue.get()) == Status.done
+
+
+def test_load_counts_connection_errors_as_failures(capsys):
+    from labops import cli
+
+    # Nothing listens on port 9: every upload fails, but the command reports instead of crashing.
+    cli.main(["load", "--url", "http://127.0.0.1:9", "--count", "3", "--rate", "0"])
+    assert "sent=3 accepted=0 failed=3" in capsys.readouterr().out

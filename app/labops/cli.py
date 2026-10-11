@@ -30,16 +30,25 @@ def cmd_generate(args: argparse.Namespace) -> None:
 
 
 def cmd_load(args: argparse.Namespace) -> None:
-    ok = fail = 0
+    ok = fail = sent = 0
     interval = 1.0 / args.rate if args.rate > 0 else 0
-    with httpx.Client(base_url=args.url, timeout=10) as client:
-        for i in range(args.count):
-            data = synthetic_spectrum(field_tesla=(1 + (i % 5)) / 1e3, seed=i)
-            r = client.post("/api/v1/uploads", files={"file": (f"load-{i}.csv", data, "text/csv")})
-            ok, fail = (ok + 1, fail) if r.status_code == 202 else (ok, fail + 1)
-            if interval:
-                time.sleep(interval)
-    print(f"sent={args.count} accepted={ok} failed={fail}")
+    try:
+        with httpx.Client(base_url=args.url, timeout=10) as client:
+            for i in range(args.count):
+                data = synthetic_spectrum(field_tesla=(1 + (i % 5)) / 1e3, seed=i)
+                sent += 1
+                try:
+                    r = client.post("/api/v1/uploads", files={"file": (f"load-{i}.csv", data, "text/csv")})
+                    accepted = r.status_code == 202
+                except httpx.HTTPError:
+                    # A dropped connection during a game day is a failed upload, not a crash.
+                    accepted = False
+                ok, fail = (ok + 1, fail) if accepted else (ok, fail + 1)
+                if interval:
+                    time.sleep(interval)
+    except KeyboardInterrupt:
+        pass  # Ctrl+C still prints the summary below
+    print(f"sent={sent} accepted={ok} failed={fail}")
 
 
 def requeue_stuck(deps: Deps, older_than_seconds: int, dry_run: bool = False) -> list[str]:
