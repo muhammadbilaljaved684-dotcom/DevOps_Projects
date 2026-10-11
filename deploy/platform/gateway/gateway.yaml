@@ -1,10 +1,31 @@
 # One shared Gateway for the cluster; app teams attach HTTPRoutes to it.
+# How Envoy Gateway exposes its proxy. On EKS this asks AWS for a Network
+# Load Balancer (the default would be a Classic Load Balancer). On kind the
+# annotations are ignored and the service simply stays without an address.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: labops-proxy
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: nlb
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
   name: envoy
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: labops-proxy
+    namespace: envoy-gateway-system
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
