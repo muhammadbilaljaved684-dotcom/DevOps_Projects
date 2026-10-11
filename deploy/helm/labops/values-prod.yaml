@@ -40,4 +40,4 @@ postgres:
 
 gateway:
   enabled: true
-  hostname: labops.example.com      # TLS is terminated on the shared Gateway (cert-manager)
+  hostname: labops.example.com      # Demo listener is plain HTTP; add TLS (e.g. cert-manager) for real use
