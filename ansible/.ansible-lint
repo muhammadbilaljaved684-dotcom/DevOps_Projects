@@ -1,0 +1,7 @@
+# Lint our playbooks and roles, not the third-party collections that
+# `ansible-galaxy collection install` puts into ./collections.
+profile: production
+exclude_paths:
+  - collections/
+  - reports/
+  - .vagrant/
