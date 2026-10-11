@@ -1,7 +1,7 @@
 # Dev environment (local kind cluster or the EKS dev namespace).
 # CI updates image.tag here automatically after every green build on main.
 image:
-  tag: "0.1.0"
+  tag: "sha-a13d1a7"
 
 config:
   logLevel: DEBUG
