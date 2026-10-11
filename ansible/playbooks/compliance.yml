@@ -1,21 +1,32 @@
 # CIS benchmark scan with OpenSCAP; HTML reports are fetched to ./reports/.
 # Run before and after site.yml and put both scores in the README; the
 # difference is the evidence that the hardening actually did something.
+#
+# Ubuntu's own ssg-debderived package stops at 22.04, so on Debian-family
+# hosts the rules come from the official ComplianceAsCode release (pinned
+# version + SHA-256). RHEL-family hosts use the distribution package.
 - name: OpenSCAP CIS compliance scan
   hosts: lab_edge
   become: true
   vars:
     report_dir: "{{ playbook_dir }}/../reports"
     scap_profile: xccdf_org.ssgproject.content_profile_cis_level1_server
+    ssg_version: "0.1.82"
+    ssg_sha256: "765e84bdce7f9055f9b9c2dd0ee2b713d4255f8eec94eac6d35ea4973c28919c"
+    ssg_dir: /opt/scap-security-guide
+    ubuntu_ds: "ssg-ubuntu{{ ansible_distribution_version | replace('.', '') }}-ds.xml"
     scap_content:
-      Debian: "/usr/share/xml/scap/ssg/content/ssg-ubuntu{{ ansible_distribution_version | replace('.', '') }}-ds.xml"
+      Debian: "{{ ssg_dir }}/scap-security-guide-{{ ssg_version }}/{{ ubuntu_ds }}"
       RedHat: "/usr/share/xml/scap/ssg/content/ssg-rhel{{ ansible_distribution_major_version }}-ds.xml"
+    stamp: "{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}{{ ansible_date_time.minute }}"
 
   tasks:
-    - name: Install OpenSCAP scanner and content (Debian)
+    - name: Install OpenSCAP scanner (Debian)
       ansible.builtin.apt:
-        name: [openscap-scanner, ssg-debderived]
+        name: [openscap-scanner, unzip]
         state: present
+        update_cache: true
+        cache_valid_time: 3600
       when: ansible_os_family == 'Debian'
 
     - name: Install OpenSCAP scanner and content (RedHat)
@@ -24,17 +35,50 @@
         state: present
       when: ansible_os_family == 'RedHat'
 
+    - name: Get the CIS content from the ComplianceAsCode release (Debian)
+      when: ansible_os_family == 'Debian'
+      block:
+        - name: Create the content directory
+          ansible.builtin.file:
+            path: "{{ ssg_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Download the pinned release (about 180 MB, once)
+          ansible.builtin.get_url:
+            url: "https://github.com/ComplianceAsCode/content/releases/download/v{{ ssg_version }}/scap-security-guide-{{ ssg_version }}.zip"
+            dest: "/var/tmp/scap-security-guide-{{ ssg_version }}.zip"
+            checksum: "sha256:{{ ssg_sha256 }}"
+            mode: "0644"
+
+        - name: Extract only the datastream for this Ubuntu version
+          ansible.builtin.unarchive:
+            src: "/var/tmp/scap-security-guide-{{ ssg_version }}.zip"
+            dest: "{{ ssg_dir }}"
+            remote_src: true
+            include: ["scap-security-guide-{{ ssg_version }}/{{ ubuntu_ds }}"]
+            creates: "{{ ssg_dir }}/scap-security-guide-{{ ssg_version }}/{{ ubuntu_ds }}"
+
     - name: Run the scan (non-zero exit means "some rules failed", not an error)
       ansible.builtin.command: >-
         oscap xccdf eval --profile {{ scap_profile }}
-        --results /tmp/oscap-results.xml --report /tmp/oscap-report.html
+        --results /var/tmp/oscap-results.xml --report /var/tmp/oscap-report.html
         {{ scap_content[ansible_os_family] }}
       register: scan
       changed_when: false
       failed_when: scan.rc not in [0, 2]
 
-    - name: Fetch HTML report
+    - name: Read the score from the results
+      ansible.builtin.command: grep -oP '<(xccdf-1.2:)?score[^>]*>\K[0-9.]+' /var/tmp/oscap-results.xml
+      register: score
+      changed_when: false
+
+    - name: Fetch the HTML report (timestamped, so BEFORE and AFTER both survive)
       ansible.builtin.fetch:
-        src: /tmp/oscap-report.html
-        dest: "{{ report_dir }}/{{ inventory_hostname }}-{{ ansible_date_time.date }}.html"
+        src: /var/tmp/oscap-report.html
+        dest: "{{ report_dir }}/{{ inventory_hostname }}-{{ stamp }}.html"
         flat: true
+
+    - name: Show the score
+      ansible.builtin.debug:
+        msg: "CIS Level 1 score for {{ inventory_hostname }}: {{ score.stdout_lines | first }}% (reports/{{ inventory_hostname }}-{{ stamp }}.html)"
