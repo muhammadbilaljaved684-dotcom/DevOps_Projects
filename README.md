@@ -133,7 +133,20 @@ infra/terraform      bootstrap, modules (network, eks, app-iam, github-oidc, ent
 ansible/             Lab-edge hardening, patching, compliance scanning
 chaos/               Game-day scripts
 docs/                Architecture, ADRs, runbooks, postmortems, setup, interview notes
+knowledge-base/      Engineering notes: DevOps lifecycle, Linux, Windows Server, DNS, Robot Fleet Monitoring
 ```
+
+## Knowledge base
+
+The theory behind this project, written up with architecture diagrams during my DevOps internship and home-lab work:
+
+| Notes | Topics |
+|---|---|
+| [DevOps Course Notes](knowledge-base/01-devops-course-notes.md) | Git, Jenkins CI/CD, Docker, Kubernetes, Helm, Terraform on AWS, Ansible, monitoring, GitOps, DevSecOps, deployment strategies |
+| [Linux Administration](knowledge-base/02-linux-administration.md) | Boot, permissions, systemd, logging, LVM, networking, firewalls, SSH, backups, NFS/Samba |
+| [Windows Server Administration](knowledge-base/03-windows-server-administration.md) | Active Directory, Group Policy, DNS, DHCP, NTFS and FSRM, disaster recovery |
+| [Robot Fleet Monitoring](knowledge-base/04-robot-fleet-monitoring.md) | Python telemetry → Prometheus → Grafana with Docker Compose |
+| [How DNS Works](knowledge-base/05-how-dns-works.md) | Resolution, records, TTL, Route 53, CoreDNS, AD DNS, troubleshooting |
 
 ## Honest limitations
 
