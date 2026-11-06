@@ -31,6 +31,16 @@ Instruments in a lab produce spectra (here: optically detected magnetic resonanc
 
 ## Architecture
 
+**Target design (planned):** run it on my own VMs first, move it to EKS with one Git change, then let a guarded AI help during incidents.
+
+![LabOps target design](docs/images/labops-target-design.png)
+
+**Real architecture (planned):** every server, node, subnet and tool, on-premises Kubernetes first and then AWS EKS.
+
+![LabOps real architecture](docs/images/labops-real-architecture.png)
+
+**Current AWS build** (what the code in this repo creates today):
+
 ![LabOps architecture](docs/images/architecture.png)
 
 The same flow as a diagram GitHub renders natively:
@@ -133,6 +143,7 @@ infra/terraform      bootstrap, modules (network, eks, app-iam, github-oidc, ent
 ansible/             Lab-edge hardening, patching, compliance scanning
 chaos/               Game-day scripts
 docs/                Architecture, ADRs, runbooks, postmortems, setup, interview notes
+roadmap/             Next projects: Windows Admin, Microsoft 365 (designs)
 knowledge-base/      Engineering notes: DevOps lifecycle, Linux, Windows Server, DNS, Robot Fleet Monitoring
 ```
 
@@ -148,6 +159,14 @@ The theory behind this project, written up with architecture diagrams during my 
 | [Robot Fleet Monitoring](knowledge-base/04-robot-fleet-monitoring.md) | Python telemetry → Prometheus → Grafana with Docker Compose |
 | [How DNS Works](knowledge-base/05-how-dns-works.md) | Resolution, records, TTL, Route 53, CoreDNS, AD DNS, troubleshooting |
 
+## Roadmap: next projects
+
+| Project | Status | Diagrams |
+|---|---|---|
+| [Linux Platform](https://github.com/muhammadbilaljaved684-dotcom/Linux-Platform) | In progress, documented day by day | in its own repo |
+| [Windows Admin](roadmap/windows-admin/README.md): AD, DNS, DHCP, Group Policy, disaster recovery | Planned | [architecture](roadmap/windows-admin/images/windows-admin-architecture.png) · [workflows](roadmap/windows-admin/images/windows-admin-workflows.png) |
+| [Microsoft 365](roadmap/microsoft-365/README.md): Entra ID, Intune, Exchange, Defender, Purview | Planned | [architecture](roadmap/microsoft-365/images/microsoft-365-architecture.png) · [workflows](roadmap/microsoft-365/images/microsoft-365-workflows.png) |
+
 ## Honest limitations
 
 - Dev and prod share one EKS cluster (separate namespaces) to keep cost down. A real company would separate them by cluster and AWS account; see [ADR 0003](docs/adr/0003-one-cluster-two-namespaces.md).
@@ -156,4 +175,4 @@ The theory behind this project, written up with architecture diagrams during my 
 
 ## License
 
-MIT
+All rights reserved. See [LICENSE](LICENSE).
