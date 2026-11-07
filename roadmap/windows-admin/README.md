@@ -1,6 +1,6 @@
 # Windows Admin: Northwind on Windows Server
 
-**Status: planned.** This is the design I am building in VMware. Screenshots and measured results will be added phase by phase.
+**Status: started (Step 0 – lab preparation).** This is the design I am building in VMware. Screenshots and measured results will be added phase by phase.
 
 Northwind needs one identity for everyone, machines that find each other by name and get addresses automatically, every PC set up the same way, a controlled file share, and a way to survive a dead server, a deleted OU, a broken GPO or a deleted file.
 
@@ -12,6 +12,12 @@ Northwind needs one identity for everyone, machines that find each other by name
 - **DC02** is a second domain controller with DNS and a DHCP failover partner, so logons keep working if DC01 dies.
 - **CLIENT01** is a domain-joined Windows 11 PC that gets its address from DHCP and its settings from Group Policy.
 - Only DC01 has a second network card to the internet, for Windows Update and as a DNS forwarder.
+
+## Step 0 – prepare the lab
+
+A separate host-only network (VMnet3, 192.168.50.0/24, VMware DHCP off) next to the Linux lab, three VMs (DC01, CLIENT01, later DC02) and the free evaluation ISOs.
+
+![Step 0](steps/windows-step-0-prepare.png)
 
 ## Workflows
 
