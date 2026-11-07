@@ -1,6 +1,6 @@
 # Windows Admin: Northwind on Windows Server
 
-**Status: started (Step 0 – lab preparation).** This is the design I am building in VMware. Screenshots and measured results will be added phase by phase.
+**Status: planned (Step 0 prepared, not started yet).** This is the design I am building in VMware. Screenshots and measured results will be added phase by phase.
 
 Northwind needs one identity for everyone, machines that find each other by name and get addresses automatically, every PC set up the same way, a controlled file share, and a way to survive a dead server, a deleted OU, a broken GPO or a deleted file.
 
